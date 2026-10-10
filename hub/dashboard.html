@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>PahadNet control room</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --base:#0e1a24; --panel:#152532; --line:#264052; --text:#e6eef3; --mute:#8ca3b3;
+  --alert:#ff5a4e; --ok:#46d19a; --off:#5d7384;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--base);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;gap:24px;padding:14px 24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{margin:0;font-size:19px;font-weight:800;letter-spacing:-.2px;margin-right:auto}
+header h1 span{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--alert);margin-right:10px;vertical-align:1px}
+.stat{display:flex;align-items:baseline;gap:8px;color:var(--mute)}
+.stat strong{font-size:22px;color:var(--text);font-weight:800}
+.stat.hot strong{color:var(--alert)}
+.link{font-size:13px;color:var(--mute)}
+.link.bad{color:var(--alert)}
+main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,1fr);min-height:calc(100vh - 60px)}
+.net{position:relative;border-right:1px solid var(--line);padding:20px 24px;display:flex;flex-direction:column}
+h2{font-size:15px;font-weight:700;margin:0 0 4px;color:var(--text)}
+.sub{margin:0 0 12px;color:var(--mute);font-size:13px}
+svg{flex:1;width:100%;min-height:360px}
+.edge{stroke:var(--line);stroke-width:2;stroke-dasharray:4 6}
+.edge.up{stroke:#3c6b86;stroke-dasharray:none}
+.node circle.ring{fill:var(--panel);stroke:var(--off);stroke-width:2}
+.node.up circle.ring{stroke:var(--ok)}
+.node.sos circle.ring{stroke:var(--alert);stroke-width:3}
+.node text{fill:var(--text);font-size:13px;font-weight:600}
+.node text.m{fill:var(--mute);font-weight:400;font-size:12px}
+.hub circle{fill:#1f3a4d;stroke:#7fb6d6;stroke-width:2}
+.hub text{fill:var(--text);font-size:13px;font-weight:700}
+.packet{fill:var(--alert)}
+.feed{padding:20px 24px;overflow:auto;max-height:calc(100vh - 60px)}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:28px 20px;color:var(--mute);text-align:center}
+.empty strong{display:block;color:var(--text);font-size:16px;margin-bottom:4px}
+.inc{display:grid;grid-template-columns:56px 1fr auto;gap:4px 14px;padding:16px 0;border-bottom:1px solid var(--line)}
+.inc:first-of-type{padding-top:4px}
+.badge{grid-row:span 3;width:56px;height:56px;border-radius:14px;display:grid;place-items:center;font-size:28px;background:color-mix(in srgb,var(--c) 22%,transparent);box-shadow:inset 0 0 0 2px var(--c)}
+.what{font-size:18px;font-weight:800;line-height:1.2}
+.when{color:var(--mute);font-size:13px;text-align:right;white-space:nowrap}
+.where{grid-column:2/4}
+.where a{color:#8cc8ff;text-decoration:none;margin-left:8px;font-size:13px}
+.where a:hover{text-decoration:underline}
+.note{grid-column:2/4;background:var(--panel);border-radius:8px;padding:8px 12px;font-size:15px}
+.meta{grid-column:2/4;color:var(--mute);font-size:12px}
+.triage{grid-column:2/4;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline;border-left:3px solid var(--pc,var(--line));padding:6px 0 6px 12px;margin:2px 0}
+.pill{font-size:13px;font-weight:800;color:var(--pc);white-space:nowrap}
+.team{font-weight:700}
+.triage .line{grid-column:1/3;font-size:14px}
+.triage .line.warn{color:#ffb3ad}
+.triage .src{grid-column:1/3;font-size:12px;color:var(--mute)}
+.triage.wait{color:var(--mute);font-size:14px}
+.inc.fresh{animation:in 2.4s ease-out}
+@keyframes in{0%{background:color-mix(in srgb,var(--alert) 30%,transparent)}100%{background:transparent}}
+a:focus-visible{outline:2px solid #8cc8ff;outline-offset:2px}
+@media (max-width:860px){main{grid-template-columns:1fr}.net{border-right:0;border-bottom:1px solid var(--line)}.feed{max-height:none}}
+@media (prefers-reduced-motion:reduce){.inc.fresh{animation:none}}
+</style></head><body>
+<header>
+  <h1><span></span>PahadNet control room</h1>
+  <div class="stat hot"><strong id="open">0</strong>SOS received</div>
+  <div class="stat"><strong id="up">0</strong>poles online</div>
+  <div class="stat"><strong id="phones">0</strong>phones connected</div>
+  <div class="link" id="serial">Connecting to central node</div>
+</header>
+<main>
+  <section class="net">
+    <h2>Pole network</h2>
+    <p class="sub">Solid line: pole heard in the last 15 s. A red dot travels the link when an SOS comes in.</p>
+    <svg id="map" viewBox="0 0 600 420" role="img" aria-label="Map of poles linked to the central node"><g id="base"></g><g id="pk"></g></svg>
+  </section>
+  <section class="feed">
+    <h2>Incoming SOS</h2>
+    <p class="sub">Newest first. Location comes from the pole the phone connected to.</p>
+    <div id="list"><div class="empty"><strong>No SOS yet</strong>Connect a phone to an SOS-PahadNet Wi-Fi network to send a test.</div></div>
+  </section>
+</main>
+<script>
+const TYPE = {
+  1:{i:"\u{1FA78}",c:"#ff5a4e"}, 2:{i:"\u{1F30A}",c:"#4ea8ff"}, 3:{i:"\u{1F525}",c:"#ff9f2e"},
+  4:{i:"\u{1F3DA}",c:"#c08a5a"}, 5:{i:"\u{1F35E}",c:"#5fcf6e"}, 6:{i:"\u{1F476}",c:"#c77dff"}, 7:{i:"❓",c:"#8ca3b3"}
+};
+const NS = "http://www.w3.org/2000/svg", HUB = {x:300, y:210};
+const seen = new Set(); let first = true, pos = {};
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// SOS notes come from strangers' phones: only ever set textContent.
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+function sv(tag, attrs, text){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; return e; }
+function ago(t, now){ const s=Math.max(0,Math.round(now-t)); return s<60? s+" s ago" : s<3600? Math.round(s/60)+" min ago" : Math.round(s/3600)+" h ago"; }
+
+function drawMap(s){
+  const svg = document.getElementById("base"), ids = Object.keys(s.nodes).sort((a,b)=>a-b);
+  const sosNodes = new Set(s.incidents.filter(i => s.now - i.time < 120).map(i => String(i.node)));
+  svg.replaceChildren();
+  const r = 150; pos = {};
+  ids.forEach((id, k) => {
+    const a = -Math.PI/2 + (2*Math.PI*k)/Math.max(ids.length,1) + (ids.length===1 ? -Math.PI/4 : 0);
+    pos[id] = {x: HUB.x + r*Math.cos(a)*1.4, y: HUB.y + r*Math.sin(a)};
+  });
+  ids.forEach(id => {
+    const n = s.nodes[id], up = s.now - n.last_seen < 15, p = pos[id];
+    svg.append(sv("line",{x1:p.x,y1:p.y,x2:HUB.x,y2:HUB.y,class:"edge"+(up?" up":"")}));
+    const mid = {x:(p.x+HUB.x)/2, y:(p.y+HUB.y)/2 - 8};
+    if (up) svg.append(sv("text",{x:mid.x,y:mid.y,"text-anchor":"middle",fill:"#8ca3b3","font-size":"12"}, n.rssi+" dBm"));
+  });
+  const hub = sv("g",{class:"hub"});
+  hub.append(sv("circle",{cx:HUB.x,cy:HUB.y,r:30}), sv("text",{x:HUB.x,y:HUB.y+52,"text-anchor":"middle"},"Central node"));
+  hub.append(sv("text",{x:HUB.x,y:HUB.y+5,"text-anchor":"middle","font-size":"18"},"\u{1F4BB}"));
+  svg.append(hub);
+  ids.forEach(id => {
+    const n = s.nodes[id], up = s.now - n.last_seen < 15, p = pos[id];
+    const g = sv("g",{class:"node"+(up?" up":"")+(sosNodes.has(id)?" sos":"")});
+    g.append(sv("circle",{cx:p.x,cy:p.y,r:22,class:"ring"}), sv("text",{x:p.x,y:p.y+5,"text-anchor":"middle"},id));
+    g.append(sv("text",{x:p.x,y:p.y+42,"text-anchor":"middle"}, n.name || "Pole "+id));
+    g.append(sv("text",{x:p.x,y:p.y+58,"text-anchor":"middle",class:"m"}, up ? n.phones+" phone"+(n.phones==1?"":"s")+" connected" : "No signal "+ago(n.last_seen,s.now)));
+    svg.append(g);
+  });
+  if (!ids.length) svg.append(sv("text",{x:HUB.x,y:HUB.y+90,"text-anchor":"middle",fill:"#8ca3b3"},"Waiting for the first pole to check in"));
+}
+
+function sendPacket(node){
+  const p = pos[String(node)]; if (!p || reduce) return;
+  const dot = sv("circle",{r:7,class:"packet",cx:p.x,cy:p.y});
+  document.getElementById("pk").append(dot);  // separate layer so the 1 s redraw does not cut it off
+  dot.animate([{cx:p.x+"px",cy:p.y+"px"},{cx:HUB.x+"px",cy:HUB.y+"px"}],{duration:900,easing:"ease-in"}).onfinish=()=>dot.remove();
+}
+
+function drawList(s){
+  const list = document.getElementById("list");
+  // Only rebuild when a new SOS lands, so the highlight animation is not restarted every second.
+  list.querySelectorAll("[data-t]").forEach(e => e.textContent = ago(+e.dataset.t, s.now));
+  // Rebuild only when a new SOS lands or Gemma finishes one, so animations are not restarted every second.
+  const key = s.incidents.map(i => i.id + (i.ai ? "+" : "")).join();
+  if (!s.incidents.length || key === drawList.key) return;
+  drawList.key = key;
+  list.replaceChildren(...s.incidents.map(i => {
+    const t = TYPE[i.type] || TYPE[7], fresh = !first && !seen.has(i.id);
+    const row = el("article","inc"+(fresh?" fresh":"")); row.style.setProperty("--c", t.c);
+    const b = el("div","badge",t.i); b.setAttribute("aria-hidden","true");
+    row.append(b, el("div","what", i.type_name+", "+i.people_name+" people"));
+    const when = el("div","when", new Date(i.time*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+    const rel = el("div",null,ago(i.time,s.now)); rel.dataset.t = i.time; when.append(rel); row.append(when);
+    const where = el("div","where", "\u{1F4CD} "+(i.info.name || "Pole "+i.node)+(i.info.area ? ", "+i.info.area : ""));
+    if (i.info.lat != null){ const a=el("a",null,"Open in Maps"); a.href="https://www.google.com/maps?q="+i.info.lat+","+i.info.lon; a.target="_blank"; a.rel="noopener"; where.append(a); }
+    row.append(where);
+    if (i.note) row.append(el("div","note", i.note));
+    row.append(triageBox(i.ai));
+    row.append(el("div","meta","Pole "+i.node+", signal "+i.rssi+" dBm, message "+i.id));
+    if (fresh) sendPacket(i.node);
+    seen.add(i.id);
+    return row;
+  }));
+}
+
+const PRIO = {critical:{t:"Critical",c:"#ff5a4e"}, high:{t:"High",c:"#ffb020"}, medium:{t:"Medium",c:"#8ca3b3"}};
+function triageBox(ai){
+  if (!ai) return el("div","triage wait","Gemma is reading this SOS on the laptop...");
+  const p = PRIO[ai.priority] || PRIO.medium, box = el("div","triage");
+  box.style.setProperty("--pc", p.c);
+  box.append(el("span","pill",p.t), el("span","team","Send: "+ai.team));
+  box.append(el("div","line",ai.summary));
+  if (ai.english) box.append(el("div","line","In English: "+ai.english));
+  if (ai.danger_reason) box.append(el("div","line warn","Raised priority: "+ai.danger_reason));
+  box.append(el("div","src", ai.error ? ai.error
+    : ai.model ? "Read by "+ai.model+" on this laptop in "+ai.seconds+" s. Priority and team come from fixed rules."
+    : "No message to read. Priority and team come from fixed rules."));
+  return box;
+}
+
+async function tick(){
+  let s;
+  try { s = await (await fetch("/api/state")).json(); }
+  catch { const l=document.getElementById("serial"); l.textContent="Dashboard server stopped. Restart hub.py"; l.className="link bad"; return; }
+  const ids = Object.keys(s.nodes), up = ids.filter(id => s.now - s.nodes[id].last_seen < 15);
+  document.getElementById("open").textContent = s.incidents.length;
+  document.getElementById("up").textContent = up.length + "/" + ids.length;
+  document.getElementById("phones").textContent = up.reduce((n,id) => n + s.nodes[id].phones, 0);
+  const l = document.getElementById("serial"), ok = s.serial.startsWith("connected");
+  l.textContent = ok ? "Central node on " + s.serial.slice(10) : "Central node: " + s.serial; l.className = "link" + (ok ? "" : " bad");
+  drawMap(s); drawList(s); first = false;
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body></html>
